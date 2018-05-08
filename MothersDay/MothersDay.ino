@@ -19,6 +19,7 @@ const byte modeInterrupt = 3;
 
 short XCenter, YCenter;
 volatile int lastModeChange = 0;
+volatile int lastLightChange = 0;
 
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
@@ -480,11 +481,14 @@ void clockDisplay(){
 //triggered by interrupt 0(pin 2)
 //turn on and off the backlight of the lcd
 void setBacklight(){
-  Serial.println("backlight");
-  if(digitalRead(a) == HIGH) 
-    digitalWrite(a, LOW);
-  else
-    digitalWrite(a, HIGH);  
+  if(millis() - lastLightChange >= 500 ||  -(millis() - lastLightChange) >= 500){
+    lastLightChange = millis();
+    Serial.println("backlight");
+    if(digitalRead(a) == HIGH) 
+      digitalWrite(a, LOW);
+    else
+      digitalWrite(a, HIGH); 
+  }    
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------setBacklight
 
@@ -494,7 +498,7 @@ void setBacklight(){
 //iterates throught the modes available
 void setMode(){
   //debounce button interrupt
-  if(millis() - lastModeChange >= 500){
+  if(millis() - lastModeChange >= 500 ||  -(millis() - lastModeChange) >= 500){
     lastModeChange = millis();
     //modify here to add mode modes to be called
     if (mode < 5) mode++;
