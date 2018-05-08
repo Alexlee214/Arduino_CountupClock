@@ -1,6 +1,5 @@
 // include the library code:
 #include <LiquidCrystal.h>
-#include <TimeLib.h>
 
 // initialize the library by associating any needed LCD interface pin
 // with the arduino pin number it is connected to
@@ -210,92 +209,69 @@ void momForHours(){
 
 
 //for count year, subtract 1 from this value
-byte numYearsSince(byte day, byte month, int year){
-  return curYear - year;
+byte numYearsSince(byte days, byte months, int years){
+  return curYear - years;
 }
 
 
-int numMonthsSince(byte day, byte month, int year){
-  return (numYearsSince(day, month, year) * 12) + (12 - month) + curMonths;
+int numMonthsSince(byte days, byte months, int years){
+  return (numYearsSince(days, months, years) * 12) + (12 - months) + curMonths;
 }
 
 
-int numDaysSince(byte day, byte month, int year){
-  int days = 0;
+//calculates and returns the number of days since the a certain date
+int numDaysSince(byte days, byte months, int years){
+  int totalDays = 0;
 
   //handle the year in between the two years
-  for(byte yearCount = 1; yearCount <= numYearsSince(day, month, year) - 1; yearCount++){
-    if (isLeapYear(year + yearCount)) days = days + 366;
-    else days = days + 365; 
+  for(byte yearCount = 1; yearCount <= numYearsSince(days, months, years) - 1; yearCount++){
+    if (isLeapYear(years + yearCount)) totalDays = totalDays + 366;
+    else totalDays = totalDays + 365; 
   }
-
 
   //handles the months before in year
-  for(byte countMonth = month + 1; countMonth <= 12; countMonth++){
-    
-  }
+  for(byte countMonth = months + 1; countMonth <= 12; countMonth++)
+    totalDays = totalDays + daysInMonth(countMonth, years);
 
   //handles the months in curYear
-  for(byte countCurMonth = month - 1; countCurMonth >= 1; countCurMonth--){
+  for(byte countCurMonth = months - 1; countCurMonth >= 1; countCurMonth--)
+    totalDays = totalDays + daysInMonth(countCurMonth, years);
+
+  //handles the days in years
+  totalDays = totalDays + (daysInMonth(months, years) - days);
+
+  //handles the days in curYear
+  totalDays = totalDays + curDay;
     
-  }
-  
-/*
-  byte monthsCount;
-  //different year
-  if(curYear - year > 0){
-      if(curMonth - month > 0)
-        monthsCount = (11 + curMonth - month);
-      else if(curMonth - month == 0)
-        monthsCount = 11;
-      else monthsCount = (11 - (month - curMonth))
-  }
-  //same year
-  else if (curYear - year = 0){
-    if(curMonth - month > 0)
-      monthsCount = curMonth = month;
-    else if(curMonths)
-  }                                                
-                
-  
-  //handle the month
-  for(byte monthCount = 1; monthCount < months - curMonth; monthCount++){
-    switch(months % 12):
-      case 1, 3, 5, 7, 8, 10, 12: days = days + 31;
-      case 4, 6, 9, 11: days = days + 30;
-      case: 2: if()
-  }
-  */
-
-  return 0;
+  return totalDays;
 }
 
 
-int numHoursSince(byte day, byte month, int year){
-  return (numDaysSince(day, month, year) * 24);
+int numHoursSince(byte days, byte months, int years){
+  return (numDaysSince(days, months, years) * 24);
 }
 
 
-byte daysInMonth(byte month, int year){
-  switch(month % 12){
+byte daysInMonth(byte months, int years){
+  switch(months % 12){
       case 4:
       case 6:
       case 9:
       case 11: return 30;
-      case 2: if(isLeapYear(year)) return 29;
+      case 2: if(isLeapYear(years)) return 29;
               else return 28;
       default: return 31;        
   }   
 }
 
 //referenced from https://www.programiz.com/c-programming/examples/leap-year
-bool isLeapYear(int year){
-  if(year % 4 == 0)
+bool isLeapYear(int years){
+  if(years % 4 == 0)
     {
-        if( year % 100 == 0)
+        if( years % 100 == 0)
         {
             // year is divisible by 400, hence the year is a leap year
-            if ( year % 400 == 0)
+            if ( years % 400 == 0)
                 return true;
             else
                 return false;
