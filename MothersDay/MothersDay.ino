@@ -18,6 +18,7 @@ const byte backlightInterrupt = 2;
 const byte modeInterrupt = 3;
 
 short XCenter, YCenter;
+volatile int lastModeChange = 0;
 
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
@@ -492,30 +493,32 @@ void setBacklight(){
 //triggered by interrupt 1 (pin 3)
 //iterates throught the modes available
 void setMode(){
-  //modify here to add mode modes to be called
-  if (mode < 5) mode++;
-  else mode = 0; 
-  detachInterrupt(3);
-
-  Serial.println(mode);
-  //if more modes are added, add another case statement and specify what should happen
-  switch (mode){
-    case 0: startupScreen();
-            break;
-    case 1: clockDisplay();
-            break;
-    case 2: momForYears();
-            break;
-    case 3: momForMonths();
-            break;
-    case 4: momForDays();
-            break;
-    case 5: momForHours();  
-            break;
-    default: startupScreen();
-             break;
-  }
-  attachInterrupt(1, setMode, FALLING);
+  //debounce button interrupt
+  if(millis() - lastModeChange >= 500){
+    lastModeChange = millis();
+    //modify here to add mode modes to be called
+    if (mode < 5) mode++;
+    else mode = 0; 
+  
+    Serial.println(mode);
+    //if more modes are added, add another case statement and specify what should happen
+    switch (mode){
+      case 0: startupScreen();
+              break;
+      case 1: clockDisplay();
+              break;
+      case 2: momForYears();
+              break;
+      case 3: momForMonths();
+              break;
+      case 4: momForDays();
+              break;
+      case 5: momForHours();  
+              break;
+      default: startupScreen();
+               break;
+    }
+  }  
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------seMode
 
