@@ -40,11 +40,10 @@ const char heart[8] = {
 
 //mode 0: From: Alex Lee, 2018/5/13
 //mode 1: clock
-//mode 2: Reminders of the Day:
-//mode 3: been a mom for ___years
-//mode 4: been a mom for ___months
-//mode 5: been a mom for ___days
-//mode 6: been a mom for ___hours
+//mode 2: been a mom for ___years
+//mode 3: been a mom for ___months
+//mode 4: been a mom for ___days
+//mode 5: been a mom for ___hours
 volatile byte mode = 0;
 
 
@@ -64,8 +63,9 @@ int curYears;
 byte curHour, curMinute, curDayWeek;
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------function declaration
 //function declarations
-void setTime();
+void timeSet();
 void clockDisplay();
 void setBacklight();
 void setMode();
@@ -83,8 +83,10 @@ bool nextDateCursor(byte &cursorPosition);
 bool nextHourCursor(byte &cursorPosition);
 void twoDigitToOne(byte cursorPosition);
 byte daysInMonth(byte months, int years);
+//---------------------------------------------------------------------------------------------------------------------------------------------function declaration
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------setup
 void setup() {
   pinMode(joyX, INPUT);
   pinMode(joyY, INPUT);
@@ -98,20 +100,23 @@ void setup() {
   Serial.begin(9600);
   // set up the LCD's number of columns and rows:
   digitalWrite(a, HIGH);
-  attachInterrupt(0, setBacklight, FALLING);
-  attachInterrupt(1, setMode, FALLING);
   lcd.createChar(0, heart);
+  attachInterrupt(0, setBacklight, FALLING);
   lcd.begin(16, 2);
   timeSet();
   storeDates();
+  attachInterrupt(1, setMode, FALLING);
   startupScreen();
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------setup
 
+//---------------------------------------------------------------------------------------------------------------------------------------------loop
 void loop() {
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------loop
 
 
-
+//---------------------------------------------------------------------------------------------------------------------------------------------InitializeEEPROM
 //0 marks the beginning of a new date entry
 //year, month, day
 void initializeDates(){
@@ -132,8 +137,10 @@ void initializeDates(){
   EEPROM.write(10, 2);
   EEPROM.write(11, 14);
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------InitializeEEPROM
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------storeDates
 //stores the value of the date in EEPROMright after it has been set
 void storeDates(){
   EEPROM.write(0, 0);
@@ -145,7 +152,11 @@ void storeDates(){
   EEPROM.write(6, curMinute);
   EEPROM.write(7, curDayWeek);
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------storeDates
 
+
+//---------------------------------------------------------------------------------------------------------------------------------------------startupScreen
+//displays Mother's day message, called by an ISR triggered by interrupt 1 (int 3)
 void startupScreen(){
   Serial.println("called start");
   lcd.clear();
@@ -168,8 +179,10 @@ void startupScreen(){
   lcd.setCursor(15, 1);
   lcd.print(char(0));
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------startupScreen
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------timeSet
 //set up of the time at startup (not necessary if have an RTC)
 // cursor position for year: 1,1
 // month: 12, 1
@@ -219,8 +232,15 @@ void timeSet(){
   lcd.setCursor(cursorPosition, 1);
   delay(200);
   hourSet(readySet, cursorPosition);
-}
 
+  //don't display the cursor anymore
+  lcd.noBlink();
+}
+//---------------------------------------------------------------------------------------------------------------------------------------------timeSet
+
+
+//---------------------------------------------------------------------------------------------------------------------------------------------dateSet
+//helper function for timeSet
 //set the year, month, day at startup
 void dateSet(bool &readySet, byte &cursorPosition, int &myYears, byte &myMonths, byte &myDays){
   while(!readySet){
@@ -293,7 +313,11 @@ void dateSet(bool &readySet, byte &cursorPosition, int &myYears, byte &myMonths,
   curMonths = myMonths;
   curYears = myYears;
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------dateSet
 
+
+//---------------------------------------------------------------------------------------------------------------------------------------------hourSet
+//helper function for timeSet
 //set the hours, minute and day of week at startup
 void hourSet(bool &readySet, byte &cursorPosition){
   Serial.println(cursorPosition);
@@ -368,15 +392,22 @@ void hourSet(bool &readySet, byte &cursorPosition){
   curMinute = myMinutes;
   curDayWeek = myDaysWeek;
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------hourSet
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------twoDigitToOne
+//clears a pixel on the lcd to be able to go from displaying a 2-digit numer to a 1-digit number
 void twoDigitToOne(byte cursorPosition){
   lcd.setCursor(cursorPosition+1, 1);
   lcd.print(" ");
   lcd.setCursor(cursorPosition, 1);
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------twoDigitToOne
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------nextDateCursor
+//helper function for dateSet
+//sets the value of the next cursor position and returns if dateSet should terminate
 bool nextDateCursor(byte &cursorPosition){
   if(cursorPosition == 1){
     lcd.setCursor(9, 1);
@@ -392,7 +423,12 @@ bool nextDateCursor(byte &cursorPosition){
   delay(300);
   return false;
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------nextDateCursor
 
+
+//---------------------------------------------------------------------------------------------------------------------------------------------nextHourCursor
+//helper function for hourSet
+//sets the value of the next cursor position and returns if hourSet should terminate
 bool nextHourCursor(byte &cursorPosition){
   if(cursorPosition == 1){
     lcd.setCursor(7, 1);
@@ -409,7 +445,12 @@ bool nextHourCursor(byte &cursorPosition){
   delay(300);
   return true;
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------nextHourCursor
 
+
+//---------------------------------------------------------------------------------------------------------------------------------------------calibrateJoy
+//calibrates the center position ofthe joysticks
+//takes 0.2 seconds upon startup
 void calibrateJoy(){
   short sumX = 0;
   short sumY = 0;
@@ -417,20 +458,26 @@ void calibrateJoy(){
   for(int count = 0; count < 20; count++){
     sumX += analogRead(joyX);
     sumY += analogRead(joyY);
+    delay(10);
   }
 
   XCenter = (short)(sumX / 20);
   YCenter = (short)(sumY / 20);
 }
 
-
+//---------------------------------------------------------------------------------------------------------------------------------------------displayClock
+//displays the date, time 
 void clockDisplay(){
   lcd.clear();
   delay(100);
   lcd.setCursor(1, 0);
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------displayClock
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------setBacklight
+//triggered by interrupt 0(pin 2)
+//turn on and off the backlight of the lcd
 void setBacklight(){
   Serial.println("backlight");
   if(digitalRead(a) == HIGH) 
@@ -438,13 +485,20 @@ void setBacklight(){
   else
     digitalWrite(a, HIGH);  
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------setBacklight
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------seMode
+//triggered by interrupt 1 (pin 3)
+//iterates throught the modes available
 void setMode(){
+  //modify here to add mode modes to be called
   if (mode < 5) mode++;
   else mode = 0; 
+  detachInterrupt(3);
 
   Serial.println(mode);
+  //if more modes are added, add another case statement and specify what should happen
   switch (mode){
     case 0: startupScreen();
             break;
@@ -461,10 +515,13 @@ void setMode(){
     default: startupScreen();
              break;
   }
-  
+  attachInterrupt(1, setMode, FALLING);
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------seMode
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------momForYears
+//displays how many years mom has been a mom
 void momForYears(){
   Serial.println("called years");
   lcd.clear();
@@ -476,8 +533,11 @@ void momForYears(){
   lcd.setCursor(11, 1);
   lcd.print("Years");
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------momForYears
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------momForMonths
+//displays how many months mom has been a mom
 void momForMonths(){
   Serial.println("called months");
   lcd.clear();
@@ -489,8 +549,11 @@ void momForMonths(){
   lcd.setCursor(10, 1);
   lcd.print("Months");
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------momForMonths
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------momForDays
+//displays how many days mom has been a mom
 void momForDays(){
   Serial.println("called days");
   lcd.clear();
@@ -502,8 +565,11 @@ void momForDays(){
   lcd.setCursor(12, 1);
   lcd.print("days");
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------momForDays
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------momForHours
+//displays how many hours mom has been a mom
 void momForHours(){
   Serial.println("called hours");
   lcd.clear();
@@ -515,19 +581,28 @@ void momForHours(){
   lcd.setCursor(11, 1);
   lcd.print("hours");
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------momForYears
 
 
+
+//---------------------------------------------------------------------------------------------------------------------------------------------numYearsSince
+//calculates how many years has past been the current year and a given year
 //for count year, subtract 1 from this value
 byte numYearsSince(byte days, byte months, int years){
   return curYears - years;
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------numYearsSince
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------numMonthsSince
+//calculates how many years has past been the current year and a given year
 int numMonthsSince(byte days, byte months, int years){
   return (numYearsSince(days, months, years) * 12) + (12 - months) + curMonths;
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------numMonthsSince
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------numDaysSince
 //calculates and returns the number of days since the a certain date
 int numDaysSince(byte days, byte months, int years){
   int totalDays = 0;
@@ -554,13 +629,20 @@ int numDaysSince(byte days, byte months, int years){
     
   return totalDays;
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------numDaysSince
 
 
+
+//---------------------------------------------------------------------------------------------------------------------------------------------numHoursSince
+//calculates and returns the number of hours since the a certain date and time
 int numHoursSince(byte days, byte months, int years){
   return (numDaysSince(days, months, years) * 24);
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------numHoursSince
 
 
+//---------------------------------------------------------------------------------------------------------------------------------------------daysInMonth
+//Returns the number of days in a given month in a given year
 byte daysInMonth(byte months, int years){
   switch(months % 12){
       case 4:
@@ -572,7 +654,12 @@ byte daysInMonth(byte months, int years){
       default: return 31;        
   }   
 }
+//---------------------------------------------------------------------------------------------------------------------------------------------daysInMonth
 
+
+
+//---------------------------------------------------------------------------------------------------------------------------------------------isLeapYear
+//Returns whether or not a certain year is leap year
 //referenced from https://www.programiz.com/c-programming/examples/leap-year
 bool isLeapYear(int years){
   if(years % 4 == 0)
@@ -591,4 +678,4 @@ bool isLeapYear(int years){
     else
        return false;
 }
-
+//---------------------------------------------------------------------------------------------------------------------------------------------isLeapYear
