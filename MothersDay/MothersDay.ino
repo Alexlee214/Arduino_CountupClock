@@ -1,6 +1,12 @@
 //everytime it starts up, the value that was last recorded upon set up is stored
 //next, keep track of the time in the timer and update hour, day, date accordingly in loop
 //set up timer so that the value is stored in EEPROM every once in a while
+//backlight auto off after 10 seconds of inactivity
+//timer mode?
+//countdown to newYears?
+//events? (new years)
+//Bday?
+//closest event?
 
 // include the library code:
 #include <LiquidCrystal.h>
@@ -37,23 +43,27 @@ const char heart[8] = {
 
 //use button to turn on and off backlight, also auto off after 30 seconds
 //use interrupt Service Routine to set the mode
-
 //use button and ISR to set mode, mode automatically returns to 0 after 30 minutes
-
 //mode 0: From: Alex Lee, 2018/5/13
 //mode 1: clock
 //mode 2: been a mom for ___years
 //mode 3: been a mom for ___months
 //mode 4: been a mom for ___days
 //mode 5: been a mom for ___hours
-volatile byte mode = 0;
-
+const byte totalModeNum = 6;
+volatile byte mode;
+const byte startMode = 0;
+const byte clockMode = 1;
+const byte momYearsMode = 2;
+const byte momMonthsMode = 3;
+const byte momDaysMode = 4;
+const byte momHoursMode = 5;
 
 byte childrenBDay = 14;
 byte childrenBMonth = 2;
 int childrenBYear = 1998;
 
-int momMonths = 243;
+int momMonths = 0;
 int momDays = 0;
 int momHours = 0;
 byte momYears = 0;
@@ -62,7 +72,9 @@ byte momYears = 0;
 byte curDays;
 byte curMonths;
 int curYears;
-byte curHour, curMinute, curDayWeek;
+byte curHour, curMinute, curDayWeek, curSecond;
+
+unsigned long lastMillis = 0;
 
 
 //---------------------------------------------------------------------------------------------------------------------------------------------function declaration
@@ -85,6 +97,7 @@ bool nextDateCursor(byte &cursorPosition);
 bool nextHourCursor(byte &cursorPosition);
 void twoDigitToOne(byte cursorPosition);
 byte daysInMonth(byte months, int years);
+void printModeNum(byte modeNum);
 //---------------------------------------------------------------------------------------------------------------------------------------------function declaration
 
 
@@ -106,14 +119,58 @@ void setup() {
   attachInterrupt(0, setBacklight, FALLING);
   lcd.begin(16, 2);
   timeSet();
+  //set the starting time for keeping track of time
+  lastMillis = millis();
   storeDates();
   attachInterrupt(1, setMode, FALLING);
+  //start from the startup mode
+  mode = 0;
   startupScreen();
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------setup
 
 //---------------------------------------------------------------------------------------------------------------------------------------------loop
 void loop() {
+  unsigned long curMillis = millis();
+
+  //after 1 minute, update the time
+  //also handles when millis resets, happens approximately every 49.7 days
+  if(abs(curMillis - lastMillis) >= 60000){
+    //reset the time before all calculations for more accurate time keeping
+    lastMillis = millis();
+
+    //increment minute, and update hour if exceeded limit
+    curMinute++;
+    if(curMinute > 59){
+      curMinute = 0;
+      curHour++;
+    }
+    //update the day of week and date if a new day
+    if(curHour > 23){
+      curHour = 0;
+      curDays++;
+      curDayWeek++;
+    }
+    //reset to monday if exceeds sunday
+    if(curDayWeek > 7){
+      curDayWeek = 1;
+    }
+    //if month is over, go to the next month
+    if(curDays > daysInMonth(curMonths, curYears)){
+      curDays = 1;
+      curMonths++;
+    }
+    //go to next year if month exceeds limit
+    if(curMonths > 12){
+      curMonths = 1;
+      curYears++;
+    }
+
+    //if screen is displaying clock, update in real-time
+    if(mode == clockMode)
+      clockDisplay();
+      
+  }
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------loop
 
@@ -160,26 +217,18 @@ void storeDates(){
 //---------------------------------------------------------------------------------------------------------------------------------------------startupScreen
 //displays Mother's day message, called by an ISR triggered by interrupt 1 (int 3)
 void startupScreen(){
-  Serial.println("called start");
   lcd.clear();
   delay(100);
   lcd.setCursor(0, 0);
-  lcd.print("Happy MothersDay");
+  lcd.print(F("Happy MothersDay"));
   lcd.setCursor(0, 1);
   lcd.print(char(0));
-  lcd.setCursor(1, 1);
   lcd.print(char(0));
-  lcd.setCursor(2, 1);
+  lcd.print(F("Love Alex"));
   lcd.print(char(0));
-  lcd.print("Love Alex");
-  lcd.setCursor(12, 1);
   lcd.print(char(0));
-  lcd.setCursor(13, 1);
-  lcd.print(char(0));
-  lcd.setCursor(14, 1);
-  lcd.print(char(0));
-  lcd.setCursor(15, 1);
-  lcd.print(char(0));
+
+  printModeNum(mode);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------startupScreen
 
@@ -202,15 +251,15 @@ void timeSet(){
   //setting up for setting the date
   lcd.clear();
   lcd.setCursor(1, 0);
-  lcd.print("Year/Month/Day ");
+  lcd.print(F("Year/Month/Day "));
   lcd.setCursor(1, 1);
   lcd.print(myYears);
   lcd.setCursor(5, 1);
-  lcd.print("/");
-  lcd.setCursor(9, 1);
+  lcd.print(F("/"));
+  lcd.setCursor(8, 1);
   lcd.print(myMonths);
   lcd.setCursor(12, 1);
-  lcd.print("/");
+  lcd.print(F("/"));
   lcd.setCursor(14, 1);
   lcd.print(myDays);
   lcd.setCursor(cursorPosition, 1);
@@ -220,15 +269,15 @@ void timeSet(){
   //setting up for setting the time
   lcd.clear();
   lcd.setCursor(1, 0);
-  lcd.print("Hour/Minute/Day");
+  lcd.print(F("Hour:Minute|Day"));
   lcd.setCursor(1, 1);
   lcd.print(EEPROM.read(5));
   lcd.setCursor(4, 1);
-  lcd.print(":");
+  lcd.print(F(":"));
   lcd.setCursor(7, 1);
   lcd.print(EEPROM.read(6));
   lcd.setCursor(11, 1);
-  lcd.print("|");
+  lcd.print(F("|"));
   lcd.setCursor(13, 1);
   lcd.print(EEPROM.read(7));
   lcd.setCursor(cursorPosition, 1);
@@ -258,7 +307,7 @@ void dateSet(bool &readySet, byte &cursorPosition, int &myYears, byte &myMonths,
                 lcd.print(myYears);
                 break;
                 //provide boundary for month
-        case 9: if(myMonths < 12) myMonths++;
+        case 8: if(myMonths < 12) myMonths++;
                 else{ 
                   myMonths = 1;
                   //clears a pixel on the lcd so that the 1 digit value shows up corectly
@@ -285,7 +334,7 @@ void dateSet(bool &readySet, byte &cursorPosition, int &myYears, byte &myMonths,
         case 1: myYears--;
                 lcd.print(myYears);
                 break;
-        case 9: if(myMonths > 1){
+        case 8: if(myMonths > 1){
                   myMonths--;
                   //clears a pixel on the lcd so that the 1 digit value shows up corectly
                   if(myMonths <= 9){
@@ -322,7 +371,6 @@ void dateSet(bool &readySet, byte &cursorPosition, int &myYears, byte &myMonths,
 //helper function for timeSet
 //set the hours, minute and day of week at startup
 void hourSet(bool &readySet, byte &cursorPosition){
-  Serial.println(cursorPosition);
   lcd.setCursor(1, 1);
   byte myHours = EEPROM.read(5);
   byte myMinutes = EEPROM.read(6);
@@ -393,6 +441,7 @@ void hourSet(bool &readySet, byte &cursorPosition){
   curHour = myHours;
   curMinute = myMinutes;
   curDayWeek = myDaysWeek;
+  curSecond = 0;
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------hourSet
 
@@ -401,7 +450,7 @@ void hourSet(bool &readySet, byte &cursorPosition){
 //clears a pixel on the lcd to be able to go from displaying a 2-digit numer to a 1-digit number
 void twoDigitToOne(byte cursorPosition){
   lcd.setCursor(cursorPosition+1, 1);
-  lcd.print(" ");
+  lcd.print(F(" "));
   lcd.setCursor(cursorPosition, 1);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------twoDigitToOne
@@ -412,10 +461,10 @@ void twoDigitToOne(byte cursorPosition){
 //sets the value of the next cursor position and returns if dateSet should terminate
 bool nextDateCursor(byte &cursorPosition){
   if(cursorPosition == 1){
-    lcd.setCursor(9, 1);
-    cursorPosition = 9;
+    lcd.setCursor(8, 1);
+    cursorPosition = 8;
   }
-  else if(cursorPosition == 9){
+  else if(cursorPosition == 8){
     lcd.setCursor(14, 1);
     cursorPosition = 14;
   }
@@ -452,7 +501,7 @@ bool nextHourCursor(byte &cursorPosition){
 
 //---------------------------------------------------------------------------------------------------------------------------------------------calibrateJoy
 //calibrates the center position ofthe joysticks
-//takes 0.2 seconds upon startup
+//takes 0.2 seconds upon startup 
 void calibrateJoy(){
   short sumX = 0;
   short sumY = 0;
@@ -471,10 +520,75 @@ void calibrateJoy(){
 //displays the date, time 
 void clockDisplay(){
   lcd.clear();
-  delay(100);
-  lcd.setCursor(1, 0);
+  lcd.setCursor(0, 0);
+  printDate(curMonths, curDays, curYears, curHour, curMinute, curDayWeek);
+  printModeNum(mode);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------displayClock
+
+
+//prints the current month on the lcd and sets where the next cursor should go
+void printDate(byte myMonths, byte myDays, int myYears, byte myHours, byte myMinutes, byte myDaysWeek){
+  switch(myMonths){
+    case 1: lcd.print(F("JAN"));
+            break;
+    case 2:lcd.print(F("FEB"));
+            break;
+    case 3:lcd.print(F("MAR"));
+            break;
+    case 4:lcd.print(F("APR"));
+            break;
+    case 5:lcd.print(F("MAY"));
+            break;
+    case 6:lcd.print(F("JUN"));
+            break;
+    case 7:lcd.print(F("JUL"));
+            break;
+    case 8:lcd.print(F("AUG"));
+            break;
+    case 9:lcd.print(F("SEPT"));
+            break;
+    case 10:lcd.print(F("OCT"));
+            break;
+    case 11:lcd.print(F("NOV"));
+            break;
+    case 12:lcd.print(F("DEC"));
+            break;
+  }
+  lcd.print(F(", "));
+  lcd.print(myDays);
+  lcd.print(F(", "));
+  lcd.print(myYears);
+
+  //convert to PM, AM format
+  lcd.setCursor(0, 1);
+  if(myHours >= 13) lcd.print(myHours % 12);
+  else lcd.print(myHours);
+  lcd.print(":");
+  lcd.print(myMinutes);
+  if(myHours >= 12) lcd.print(F("PM"));
+  else lcd.print(F("AM"));
+
+  lcd.print(F(" "));
+  switch(myDaysWeek){
+    case 1: lcd.print(F("MON"));
+            break;
+    case 2: lcd.print(F("TUES"));
+            break;
+    case 3: lcd.print(F("WED"));
+            break;
+    case 4: lcd.print(F("THURS"));
+            break;
+    case 5: lcd.print(F("FRI"));
+            break;
+    case 6: lcd.print(F("SAT"));
+            break;
+    case 7: lcd.print(F("SUN"));
+            break;
+  }
+
+    
+}
 
 
 //---------------------------------------------------------------------------------------------------------------------------------------------setBacklight
@@ -483,7 +597,6 @@ void clockDisplay(){
 void setBacklight(){
   if(millis() - lastLightChange >= 500 ||  -(millis() - lastLightChange) >= 500){
     lastLightChange = millis();
-    Serial.println("backlight");
     if(digitalRead(a) == HIGH) 
       digitalWrite(a, LOW);
     else
@@ -503,21 +616,20 @@ void setMode(){
     //modify here to add mode modes to be called
     if (mode < 5) mode++;
     else mode = 0; 
-  
-    Serial.println(mode);
+
     //if more modes are added, add another case statement and specify what should happen
     switch (mode){
-      case 0: startupScreen();
+      case startMode: startupScreen();
               break;
-      case 1: clockDisplay();
+      case clockMode: clockDisplay();
               break;
-      case 2: momForYears();
+      case momYearsMode: momForYears();
               break;
-      case 3: momForMonths();
+      case momMonthsMode: momForMonths();
               break;
-      case 4: momForDays();
+      case momDaysMode: momForDays();
               break;
-      case 5: momForHours();  
+      case momHoursMode: momForHours();  
               break;
       default: startupScreen();
                break;
@@ -530,15 +642,14 @@ void setMode(){
 //---------------------------------------------------------------------------------------------------------------------------------------------momForYears
 //displays how many years mom has been a mom
 void momForYears(){
-  Serial.println("called years");
   lcd.clear();
-  delay(100);
   lcd.setCursor(0, 0);
-  lcd.print("Been a mom for: ");
+  lcd.print(F("Been a mom for: "));
   lcd.setCursor(0,1);
   lcd.print(momYears);
-  lcd.setCursor(11, 1);
-  lcd.print("Years");
+  lcd.print(F(" "));
+  lcd.print(F("Years"));
+  printModeNum(mode);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------momForYears
 
@@ -546,15 +657,14 @@ void momForYears(){
 //---------------------------------------------------------------------------------------------------------------------------------------------momForMonths
 //displays how many months mom has been a mom
 void momForMonths(){
-  Serial.println("called months");
   lcd.clear();
-  delay(100);
   lcd.setCursor(0, 0);
-  lcd.print("Been a mom for: ");
+  lcd.print(F("Been a mom for: "));
   lcd.setCursor(0,1);
   lcd.print(momMonths);
-  lcd.setCursor(10, 1);
-  lcd.print("Months");
+  lcd.print(F(" "));
+  lcd.print(F("Months"));
+  printModeNum(mode);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------momForMonths
 
@@ -562,15 +672,14 @@ void momForMonths(){
 //---------------------------------------------------------------------------------------------------------------------------------------------momForDays
 //displays how many days mom has been a mom
 void momForDays(){
-  Serial.println("called days");
   lcd.clear();
-  delay(100);
   lcd.setCursor(0, 0);
-  lcd.print("Been a mom for: ");
+  lcd.print(F("Been a mom for: "));
   lcd.setCursor(0,1);
   lcd.print(momDays);
-  lcd.setCursor(12, 1);
-  lcd.print("days");
+  lcd.print(F(" "));
+  lcd.print(F("days"));
+  printModeNum(mode);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------momForDays
 
@@ -578,15 +687,14 @@ void momForDays(){
 //---------------------------------------------------------------------------------------------------------------------------------------------momForHours
 //displays how many hours mom has been a mom
 void momForHours(){
-  Serial.println("called hours");
   lcd.clear();
-  delay(100);
   lcd.setCursor(0, 0);
-  lcd.print("Been a mom for: ");
+  lcd.print(F("Been a mom for: "));
   lcd.setCursor(0,1);
   lcd.print(momDays);
-  lcd.setCursor(11, 1);
-  lcd.print("hours");
+  lcd.print(F(" "));
+  lcd.print(F("hours"));
+  printModeNum(mode);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------momForYears
 
@@ -664,6 +772,14 @@ byte daysInMonth(byte months, int years){
 //---------------------------------------------------------------------------------------------------------------------------------------------daysInMonth
 
 
+//prints the mode number on the bottom right corner
+void printModeNum(byte modeNum){
+  lcd.setCursor(13, 1);
+  //mode num starts from 0 as oppose to 1
+  lcd.print(modeNum + 1);
+  lcd.print(F("/"));
+  lcd.print(totalModeNum);
+}
 
 //---------------------------------------------------------------------------------------------------------------------------------------------isLeapYear
 //Returns whether or not a certain year is leap year
