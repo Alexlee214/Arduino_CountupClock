@@ -19,7 +19,7 @@ const byte joyY = A0;
 const byte joyX = A1;
 const byte joyClick = A2;
 
-const byte rs = 12, en = 11, d4 = 7, d5 = 6, d6 = 5, d7 = 4, a = 8;
+const byte rs = 9, en = 10, d4 = 8, d5 = 7, d6 = 6, d7 = 5, a = 4;
 const byte backlightInterrupt = 2;
 const byte modeInterrupt = 3;
 
@@ -29,7 +29,7 @@ volatile int lastLightChange = 0;
 
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
-const char heart[8] = {
+const char heart[] = {
   B00000,
   B00000,
   B01010,
@@ -40,6 +40,16 @@ const char heart[8] = {
   B00000
 };
 
+const char leftArrow[] = {
+  B00000,
+  B00000,
+  B00100,
+  B01000,
+  B11111,
+  B01000,
+  B00100,
+  B00000
+};
 
 //use button to turn on and off backlight, also auto off after 30 seconds
 //use interrupt Service Routine to set the mode
@@ -54,6 +64,7 @@ const byte totalModeNum = 6;
 volatile byte mode;
 const byte startMode = 0;
 const byte clockMode = 1;
+//const byte timerMode = 2;
 const byte momYearsMode = 2;
 const byte momMonthsMode = 3;
 const byte momDaysMode = 4;
@@ -76,10 +87,20 @@ byte curHour, curMinute, curDayWeek, curSecond;
 
 unsigned long lastMillis = 0;
 
+//pending to be implemented
+volatile bool backlightShield = false;
+volatile bool modeShield = false;
+volatile unsigned long lastBacklightOn = 0;
+
+byte timerHour = 0;
+byte timerMinute = 0;
+byte timerSecond = 0;
+bool timerOn = false;
 
 //---------------------------------------------------------------------------------------------------------------------------------------------function declaration
 //function declarations
 void timeSet();
+void timeUpdate();
 void clockDisplay();
 void setBacklight();
 void setMode();
@@ -93,6 +114,7 @@ int numDaysSince(byte day, byte month, int year);
 int numHoursSince(byte day, byte month, int year);
 bool isLeapYear(int year);
 void calibrateJoy();
+void timerCountdown();
 bool nextDateCursor(byte &cursorPosition);
 bool nextHourCursor(byte &cursorPosition);
 void twoDigitToOne(byte cursorPosition);
@@ -111,27 +133,52 @@ void setup() {
   pinMode(backlightInterrupt, INPUT_PULLUP);
   calibrateJoy();
   
-  //initializeDates();
+  initializeDates();
   Serial.begin(9600);
-  // set up the LCD's number of columns and rows:
-  digitalWrite(a, HIGH);
+  // set up the LCD's number of columns and rows
   lcd.createChar(0, heart);
+  //lcd.createChar(1, leftArrow);
   attachInterrupt(0, setBacklight, FALLING);
   lcd.begin(16, 2);
+  digitalWrite(a, HIGH);
   timeSet();
   //set the starting time for keeping track of time
   lastMillis = millis();
   storeDates();
   attachInterrupt(1, setMode, FALLING);
   //start from the startup mode
-  mode = 0;
   startupScreen();
+  lastBacklightOn = millis();
+  mode = 0;
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------setup
 
 //---------------------------------------------------------------------------------------------------------------------------------------------loop
 void loop() {
-  unsigned long curMillis = millis();
+  timeUpdate();
+
+  Serial.print(lastBacklightOn);
+  Serial.print("  ");
+  Serial.println(millis() - lastBacklightOn);
+
+  //doesn't really work yet, not sure when interrupt is triggered by this
+  /*
+  if(abs(millis() - lastBacklightOn >= 5000)){
+    digitalWrite(a, LOW);
+  }
+*/
+
+/*
+ * abort functionality temporarily
+  if(mode == timerMode && timerOn == false) timerScreen();
+  if(timerOn == true) timerCountdown();
+*/  
+}
+//---------------------------------------------------------------------------------------------------------------------------------------------loop
+
+
+void timeUpdate(){
+    unsigned long curMillis = millis();
 
   //after 1 minute, update the time
   //also handles when millis resets, happens approximately every 49.7 days
@@ -150,6 +197,7 @@ void loop() {
       curHour = 0;
       curDays++;
       curDayWeek++;
+      storeDates();
     }
     //reset to monday if exceeds sunday
     if(curDayWeek > 7){
@@ -165,14 +213,11 @@ void loop() {
       curMonths = 1;
       curYears++;
     }
-
-    //if screen is displaying clock, update in real-time
+    
     if(mode == clockMode)
       clockDisplay();
-      
   }
 }
-//---------------------------------------------------------------------------------------------------------------------------------------------loop
 
 
 //---------------------------------------------------------------------------------------------------------------------------------------------InitializeEEPROM
@@ -599,8 +644,10 @@ void setBacklight(){
     lastLightChange = millis();
     if(digitalRead(a) == HIGH) 
       digitalWrite(a, LOW);
-    else
+    else{
       digitalWrite(a, HIGH); 
+      lastBacklightOn = millis();
+    }  
   }    
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------setBacklight
@@ -610,11 +657,12 @@ void setBacklight(){
 //triggered by interrupt 1 (pin 3)
 //iterates throught the modes available
 void setMode(){
+  Serial.print("--------------");
   //debounce button interrupt
   if(millis() - lastModeChange >= 500 ||  -(millis() - lastModeChange) >= 500){
     lastModeChange = millis();
     //modify here to add mode modes to be called
-    if (mode < 5) mode++;
+    if (mode < (totalModeNum - 1)) mode++;
     else mode = 0; 
 
     //if more modes are added, add another case statement and specify what should happen
@@ -623,6 +671,8 @@ void setMode(){
               break;
       case clockMode: clockDisplay();
               break;
+      //case timerMode: timerScreen();
+             //break;       
       case momYearsMode: momForYears();
               break;
       case momMonthsMode: momForMonths();
@@ -630,7 +680,7 @@ void setMode(){
       case momDaysMode: momForDays();
               break;
       case momHoursMode: momForHours();  
-              break;
+              break;        
       default: startupScreen();
                break;
     }
@@ -638,6 +688,141 @@ void setMode(){
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------seMode
 
+//---------------------------------------------------------------------------------------------------------------------------------------------timerScreen
+//timer caxnnot be set in this function because it is called by an ISR, must be handled elsewhere
+void timerScreen(){
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(F("Timer"));
+  lcd.setCursor(0,1);
+  lcd.print(timerHour);
+  lcd.print(F(" h:"));
+  lcd.print(timerMinute);
+  lcd.print(F(" m:"));
+  lcd.print(timerSecond);
+  lcd.print(F(" s"));
+  printModeNum(mode);
+}
+//---------------------------------------------------------------------------------------------------------------------------------------------timerScreen
+
+/*
+//---------------------------------------------------------------------------------------------------------------------------------------------setTimer
+//returns whether timer has started
+//cursor for hour: 0, 1
+//cursor for minute: 4, 1
+//cursor for second: 8, 1
+void setTimer(){
+  byte cursorPosition = 0;
+  byte hourCount = 0;
+  byte minuteCount = 0;
+  byte secondCount = 0;
+
+  if(mode == timerMode && timerOn == false){
+    lcd.setCursor(9, 0);
+    lcd.print(F("Start:"));
+    lcd.print(char(1));
+  }
+  lcd.setCursor(0,1);
+  lcd.blink();
+  
+  //exits once interrupt 1 advances the mode
+  while(mode == timerMode && timerOn == false){
+
+    //when joystick goes up
+    if(digitalRead(joyClick) == 0){
+      nextTimerCursor(cursorPosition);  
+    //joy stick goes left to start  
+    }else if((hourCount != 0 || minuteCount != 0 || secondCount != 0) && analogRead(joyX > 1000)){
+      timerOn = true;
+      timerMinute = minuteCount;
+      timerSecond = secondCount;
+      timerHour = hourCount;
+      lcd.noBlink();
+    }else if((analogRead(joyY) < 20)){
+      switch(cursorPosition){
+        case 0: if(hourCount < 99) hourCount++;
+                lcd.print(hourCount);
+                break;
+        case 4: if(minuteCount < 59) minuteCount++;
+                lcd.print(minuteCount);
+                break;
+        case 8: if(secondCount < 59) secondCount++;
+                lcd.print(secondCount);
+                break;
+      }
+      lcd.setCursor(cursorPosition, 1);
+      delay(200);         
+    //joystick goes down            
+    }else if((analogRead(joyY) >1000)){
+      switch(cursorPosition){
+        case 0: if (hourCount > 0){
+                  hourCount--;
+                  if(hourCount == 9) twoDigitToOne(cursorPosition);
+                }
+                lcd.print(hourCount);
+                break;
+        case 4: if (minuteCount > 0){
+                  minuteCount--;
+                  if(minuteCount == 9) twoDigitToOne(cursorPosition);
+                }
+                lcd.print(minuteCount);
+                break;
+        case 8: if (secondCount > 0){
+                  secondCount--;
+                  if(secondCount == 9) twoDigitToOne(cursorPosition);
+                }
+                lcd.print(secondCount);
+                break;
+      }
+      lcd.setCursor(cursorPosition, 1);
+      delay(200);
+    }  
+  }
+}
+//---------------------------------------------------------------------------------------------------------------------------------------------setTimer
+*/
+
+
+/*
+//---------------------------------------------------------------------------------------------------------------------------------------------nextTimerCursor
+void nextTimerCursor(byte &cursorPosition){
+  if(cursorPosition == 0){
+    lcd.setCursor(4, 1);
+    cursorPosition = 4;
+  }
+  else if(cursorPosition == 4){
+    lcd.setCursor(8, 1);
+    cursorPosition = 8;
+  }else if(cursorPosition == 8){
+    lcd.setCursor(0, 1);
+    cursorPosition = 0;
+  }
+  delay(300);
+}
+//---------------------------------------------------------------------------------------------------------------------------------------------nextTimerCursor
+*/
+
+/*
+//---------------------------------------------------------------------------------------------------------------------------------------------timerCountdown
+//runs in the background even if in other modes
+//beeps for 5 seconds and jumps to timer screen when time up
+void timerCountdown(){
+  if(mode == timerMode){
+    lcd.setCursor(10,0);
+    lcd.print(F("STOP:"));
+    lcd.print(char(1));
+  }
+  if(analogRead(joyX > 1000)){
+    timerOn = false
+    ;
+    timerScreen();
+  //timer starts counting down here 
+  }else{
+    
+  }
+}
+*/
+//---------------------------------------------------------------------------------------------------------------------------------------------timerCountdown
 
 //---------------------------------------------------------------------------------------------------------------------------------------------momForYears
 //displays how many years mom has been a mom
