@@ -61,7 +61,7 @@ const char leftArrow[] = {
 //mode 4: been a mom for ___days
 //mode 5: been a mom for ___hours
 const byte totalModeNum = 6;
-volatile byte mode;
+volatile byte mode = -1;
 const byte startMode = 0;
 const byte clockMode = 1;
 //const byte timerMode = 2;
@@ -74,10 +74,10 @@ byte childrenBDay = 14;
 byte childrenBMonth = 2;
 int childrenBYear = 1998;
 
-int momMonths = 0;
-int momDays = 0;
-int momHours = 0;
-byte momYears = 0;
+int momMonths = 50;
+int momDays = 7393;
+int momHours = 177432;
+byte momYears = 20;
 
 //modify later to be set in setup
 byte curDays;
@@ -103,6 +103,7 @@ void timeSet();
 void timeUpdate();
 void clockDisplay();
 void setBacklight();
+void startupScreen();
 void setMode();
 void momForYears();
 void momForMonths();
@@ -120,6 +121,8 @@ bool nextHourCursor(byte &cursorPosition);
 void twoDigitToOne(byte cursorPosition);
 byte daysInMonth(byte months, int years);
 void printModeNum(byte modeNum);
+void storeDates();
+void fuseBytesCatch();
 //---------------------------------------------------------------------------------------------------------------------------------------------function declaration
 
 
@@ -134,6 +137,7 @@ void setup() {
   calibrateJoy();
   
   initializeDates();
+  fuseBytesCatch();
   Serial.begin(9600);
   // set up the LCD's number of columns and rows
   lcd.createChar(0, heart);
@@ -155,6 +159,7 @@ void setup() {
 
 //---------------------------------------------------------------------------------------------------------------------------------------------loop
 void loop() {
+  if (mode == -1) mode = 0;
   timeUpdate();
 
   Serial.print(lastBacklightOn);
@@ -242,6 +247,24 @@ void initializeDates(){
   EEPROM.write(11, 14);
 }
 //---------------------------------------------------------------------------------------------------------------------------------------------InitializeEEPROM
+
+void fuseBytesCatch(){
+  for(byte countX = 0; countX <= 3; countX++){
+    if(EEPROM.read(countX) == 255){
+      switch(countX){
+        case 0: EEPROM.write(0, 0);
+                break;
+        case 1:EEPROM.write(1, 18);
+               break;
+        case 2:EEPROM.write(2, 5);
+               break;
+        case 3:EEPROM.write(3, 13);
+               break;
+        default: break;
+       }
+     }
+  }
+}
 
 
 //---------------------------------------------------------------------------------------------------------------------------------------------storeDates
